@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ title }} - 九阳程序用例转换工具</title>
+    <style>
+        * { margin:0; padding:0; box-sizing:border-box; }
+        body {
+            font-family: 'Microsoft YaHei', '微软雅黑', Arial, sans-serif;
+            background: linear-gradient(135deg, #e8f4fd 0%, #dbeafe 100%);
+            min-height:100vh;
+        }
+        .header {
+            width:100%; background:linear-gradient(90deg,#1a56db,#1e40af);
+            color:white; padding:16px 40px; display:flex; align-items:center; gap:16px;
+        }
+        .header a { color:white; text-decoration:none; font-size:14px; opacity:0.8; }
+        .header a:hover { opacity:1; }
+        .header h1 { font-size:20px; margin-left:16px; }
+        .container { display:flex; justify-content:center; padding:60px 20px; }
+        .card {
+            background:white; border-radius:16px; box-shadow:0 8px 30px rgba(0,0,0,0.08);
+            padding:48px; width:100%; max-width:640px; text-align:center;
+        }
+        .card h2 { font-size:22px; color:#1e40af; margin-bottom:8px; }
+        .card p.hint { color:#6b7280; font-size:14px; margin-bottom:32px; }
+        .upload-area {
+            border:2px dashed #bfdbfe; border-radius:12px; padding:48px 24px;
+            background:#f8faff; cursor:pointer; transition:all 0.2s; margin-bottom:24px;
+        }
+        .upload-area:hover, .upload-area.dragover {
+            border-color:#3b82f6; background:#eff6ff;
+        }
+        .upload-area .icon { font-size:48px; margin-bottom:12px; }
+        .upload-area p { color:#6b7280; font-size:14px; }
+        .upload-area .filename { color:#1e40af; font-weight:600; margin-top:8px; }
+        input[type=file] { display:none; }
+        .btn-primary {
+            background:linear-gradient(90deg,#3b82f6,#2563eb); color:white; border:none;
+            padding:14px 48px; border-radius:10px; font-size:16px; font-weight:600;
+            cursor:pointer; transition:all 0.2s; width:100%;
+        }
+        .btn-primary:hover { background:linear-gradient(90deg,#2563eb,#1d4ed8); transform:translateY(-1px); }
+        .btn-primary:disabled { opacity:0.5; cursor:not-allowed; transform:none; }
+        .flash { padding:12px 20px; border-radius:8px; margin-bottom:20px; font-size:14px; }
+        .flash.error { background:#fef2f2; color:#dc2626; border:1px solid #fecaca; }
+        .flash.success { background:#f0fdf4; color:#16a34a; border:1px solid #bbf7d0; }
+        .preview-box {
+            background:#f8faff; border:1px solid #bfdbfe; border-radius:8px;
+            padding:16px; margin-bottom:24px; text-align:left; max-height:300px; overflow:auto;
+        }
+        .preview-box h4 { color:#1e40af; margin-bottom:8px; font-size:14px; }
+        .preview-box table { width:100%; border-collapse:collapse; font-size:12px; }
+        .preview-box th, .preview-box td {
+            border:1px solid #e5e7eb; padding:6px 10px; text-align:left;
+        }
+        .preview-box th { background:#eff6ff; color:#1e40af; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <a href="{{ url_for('index') }}">← 返回首页</a>
+        <h1>{{ title }}</h1>
+    </div>
+
+    <div class="container">
+        <div class="card">
+            <h2>{{ title }}</h2>
+            <p class="hint">
+                {% if 'Word' in title %}
+                    请上传「线路板功能说明书」Word文件（.docx格式），系统将按照模板格式生成报警核对Word文档。
+                {% elif '菜单' in title %}
+                    请上传「菜单流程图」Excel文件（.xlsx格式），系统将自动删除倒计时列，添加"一致性评估"列，并校正步骤序号。
+                {% else %}
+                    请上传「报警文件」Excel文件（.xlsx格式），系统将自动添加"用例结果"列，生成标准报警测试用例。
+                {% endif %}
+            </p>
+
+            {% with messages = get_flashed_messages(with_categories=true) %}
+                {% if messages %}
+                    {% for category, msg in messages %}
+                        <div class="flash {{ 'error' if category=='error' else 'success' }}">{{ msg }}</div>
+                    {% endfor %}
+                {% endif %}
+            {% endwith %}
+
+            <form method="POST" enctype="multipart/form-data" id="uploadForm">
+                <div class="upload-area" id="uploadArea">
+                    <div class="icon">📁</div>
+                    <p>点击或拖拽文件到此区域</p>
+                    {% if 'Word' in title %}
+                        <p style="font-size:12px;margin-top:4px;color:#9ca3af;">仅支持 .docx 格式（Word文档）</p>
+                    {% else %}
+                        <p style="font-size:12px;margin-top:4px;color:#9ca3af;">仅支持 .xlsx 格式</p>
+                    {% endif %}
+                    <div class="filename" id="fileName"></div>
+                </div>
+                <input type="file" name="file" id="fileInput" 
+                       {% if 'Word' in title %}
+                            accept=".docx"
+                       {% else %}
+                            accept=".xlsx,.xls"
+                       {% endif %}>
+
+                <button type="submit" class="btn-primary" id="submitBtn">开始转换</button>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        const uploadArea = document.getElementById('uploadArea');
+        const fileInput = document.getElementById('fileInput');
+        const fileName = document.getElementById('fileName');
+        const form = document.getElementById('uploadForm');
+
+        uploadArea.addEventListener('click', () => fileInput.click());
+        uploadArea.addEventListener('dragover', (e) => { e.preventDefault(); uploadArea.classList.add('dragover'); });
+        uploadArea.addEventListener('dragleave', () => uploadArea.classList.remove('dragover'));
+        uploadArea.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadArea.classList.remove('dragover');
+            if (e.dataTransfer.files.length) {
+                fileInput.files = e.dataTransfer.files;
+                fileName.textContent = e.dataTransfer.files[0].name;
+            }
+        });
+        fileInput.addEventListener('change', () => {
+            if (fileInput.files.length) {
+                fileName.textContent = fileInput.files[0].name;
+            }
+        });
+
+        form.addEventListener('submit', () => {
+            document.getElementById('submitBtn').disabled = true;
+            document.getElementById('submitBtn').textContent = '转换中...';
+        });
+    </script>
+</body>
+</html>

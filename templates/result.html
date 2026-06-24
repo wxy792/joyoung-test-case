@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>转换完成 - 九阳程序用例转换工具</title>
+    <style>
+        * { margin:0; padding:0; box-sizing:border-box; }
+        body {
+            font-family: 'Microsoft YaHei', '微软雅黑', Arial, sans-serif;
+            background: linear-gradient(135deg, #e8f4fd 0%, #dbeafe 100%);
+            min-height:100vh;
+        }
+        .header {
+            width:100%; background:linear-gradient(90deg,#1a56db,#1e40af);
+            color:white; padding:16px 40px; display:flex; align-items:center; gap:16px;
+        }
+        .header a { color:white; text-decoration:none; font-size:14px; opacity:0.8; }
+        .header a:hover { opacity:1; }
+        .header h1 { font-size:20px; margin-left:16px; }
+        .container { display:flex; justify-content:center; padding:80px 20px; }
+        .card {
+            background:white; border-radius:16px; box-shadow:0 8px 30px rgba(0,0,0,0.08);
+            padding:56px 48px; width:100%; max-width:560px; text-align:center;
+        }
+        .success-icon { font-size:72px; margin-bottom:16px; }
+        .card h2 { font-size:24px; color:#16a34a; margin-bottom:12px; }
+        .card p.desc { color:#6b7280; font-size:15px; margin-bottom:8px; line-height:1.8; }
+        .card .filename { color:#1e40af; font-weight:600; margin-bottom:32px; }
+        .btn-download {
+            display:inline-block; background:linear-gradient(90deg,#16a34a,#15803d); color:white;
+            border:none; padding:16px 56px; border-radius:10px; font-size:16px; font-weight:600;
+            cursor:pointer; transition:all 0.2s; text-decoration:none; margin-bottom:16px;
+        }
+        .btn-download:hover { transform:translateY(-1px); box-shadow:0 4px 12px rgba(22,163,74,0.3); }
+        .btn-back {
+            display:block; color:#6b7280; font-size:14px; text-decoration:none; margin-top:16px;
+        }
+        .btn-back:hover { color:#1e40af; }
+        .flash { padding:12px 20px; border-radius:8px; margin-bottom:20px; font-size:14px; }
+        .flash.error { background:#fef2f2; color:#dc2626; border:1px solid #fecaca; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <a href="{{ url_for('index') }}">← 返回首页</a>
+        <h1>转换结果</h1>
+    </div>
+
+    <div class="container">
+        <div class="card">
+            {% with messages = get_flashed_messages(with_categories=true) %}
+                {% if messages %}
+                    {% for category, msg in messages %}
+                        {% if category == 'error' %}
+                            <div class="flash error">{{ msg }}</div>
+                        {% else %}
+                            <div class="success-icon">✅</div>
+                            <h2>转换完成！</h2>
+                            <p class="desc">{{ msg }}</p>
+                            <p class="filename">文件名：{{ filename }}</p>
+                            <a class="btn-download" href="{{ download_url }}">📥 下载文件</a>
+                            <a class="btn-back" href="{{ url_for('index') }}">← 返回首页，继续转换</a>
+                        {% endif %}
+                    {% endfor %}
+                {% endif %}
+            {% endwith %}
+        </div>
+    </div>
+</body>
+</html>

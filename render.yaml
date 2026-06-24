@@ -1,0 +1,9 @@
+# Render.com 部署配置文件
+
+buildCommand: "pip install -r requirements.txt"
+startCommand: "python app.py"
+env:
+  - key: FLASK_ENV
+    value: production
+  - key: PYTHON_VERSION
+    value: 3.13.12

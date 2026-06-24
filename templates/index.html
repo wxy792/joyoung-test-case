@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>九阳程序用例转换工具</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Microsoft YaHei', '微软雅黑', Arial, sans-serif;
+            background: linear-gradient(135deg, #e8f4fd 0%, #dbeafe 100%);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        .header {
+            width: 100%;
+            background: linear-gradient(90deg, #1a56db, #1e40af);
+            color: white;
+            padding: 20px 40px;
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.15);
+        }
+        .header h1 { font-size: 24px; font-weight: 700; }
+        .header .subtitle { font-size: 14px; opacity: 0.85; margin-top: 4px; }
+        .logo { font-size: 36px; }
+        .container {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 60px 20px;
+            width: 100%;
+            max-width: 900px;
+        }
+        .card {
+            background: white;
+            border-radius: 16px;
+            box-shadow: 0 8px 30px rgba(0,0,0,0.08);
+            padding: 48px;
+            width: 100%;
+            text-align: center;
+        }
+        .card h2 {
+            font-size: 22px;
+            color: #1e40af;
+            margin-bottom: 12px;
+        }
+        .card p.desc {
+            color: #6b7280;
+            font-size: 14px;
+            margin-bottom: 40px;
+            line-height: 1.8;
+        }
+        .btn-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 24px;
+            max-width: 700px;
+            margin: 0 auto;
+        }
+        .btn-card.full-width {
+            grid-column: 1 / -1;
+            max-width: 400px;
+            margin: 0 auto;
+        }
+        .btn-card {
+            background: linear-gradient(135deg, #f0f7ff, #e0f0ff);
+            border: 2px solid #bfdbfe;
+            border-radius: 12px;
+            padding: 32px 24px;
+            cursor: pointer;
+            transition: all 0.25s;
+            text-decoration: none;
+            color: inherit;
+            display: block;
+        }
+        .btn-card:hover {
+            border-color: #3b82f6;
+            box-shadow: 0 6px 20px rgba(59,130,246,0.15);
+            transform: translateY(-2px);
+        }
+        .btn-card .icon { font-size: 48px; margin-bottom: 16px; }
+        .btn-card h3 { font-size: 18px; color: #1e40af; margin-bottom: 8px; }
+        .btn-card p { font-size: 13px; color: #6b7280; line-height: 1.6; }
+        .footer {
+            width: 100%;
+            text-align: center;
+            padding: 20px;
+            color: #9ca3af;
+            font-size: 12px;
+        }
+        @media (max-width: 600px) {
+            .btn-grid { grid-template-columns: 1fr; }
+            .card { padding: 32px 24px; }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div class="logo">🍲</div>
+        <div>
+            <h1>九阳程序用例转换工具</h1>
+            <div class="subtitle">Joyoung Test Case Converter —— 2026新品</div>
+        </div>
+    </div>
+
+    <div class="container">
+        <div class="card">
+            <h2>选择转换类型</h2>
+            <p class="desc">
+                上传研发提供的 Excel 表格，自动转换为标准测试用例格式。<br>
+                支持菜单一致性核对和报警用例两种转换模式。
+            </p>
+            <div class="btn-grid">
+                <a class="btn-card" href="{{ url_for('convert_menu') }}">
+                    <div class="icon">📋</div>
+                    <h3>菜单一致性核对转换</h3>
+                    <p>上传「菜单流程图」Excel<br>自动删除倒计时列、添加一致性评估列<br>自动校正步骤序号</p>
+                </a>
+                <a class="btn-card" href="{{ url_for('convert_alarm_route') }}">
+                    <div class="icon">⚠️</div>
+                    <h3>报警用例转换（Excel）</h3>
+                    <p>上传「报警文件」Excel<br>自动添加用例结果列<br>生成标准报警测试用例</p>
+                </a>
+                <a class="btn-card full-width" href="{{ url_for('convert_alarm_word_route') }}">
+                    <div class="icon">📝</div>
+                    <h3>报警核对Word生成</h3>
+                    <p>上传「线路板功能说明书」Word<br>按照模板格式生成报警核对Word文档<br>保持格式不变</p>
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <div class="footer">
+        九阳 2026 新品程序用例网站 · 内部工具 · v4.0<br>
+        <small>服务器端口：5001 | <a href="/version" target="_blank">版本验证</a></small>
+    </div>
+</body>
+</html>

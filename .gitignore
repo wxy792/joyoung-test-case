@@ -1,0 +1,41 @@
+# Python 缓存
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Flask 临时文件
+instance/
+.webassets-cache
+
+# 上传文件和输出文件
+uploads/*
+!uploads/.gitkeep
+outputs/*
+!outputs/.gitkeep
+
+# 日志文件
+*.log
+
+# 临时文件
+temp*.docx
+temp*.txt
+temp*.docx
+website.log
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# 系统文件
+.DS_Store
+Thumbs.db
+
+# 虚拟环境
+venv/
+env/
+ENV/
+
+# 节点模块（如果有）
+node_modules/
