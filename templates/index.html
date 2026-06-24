@@ -112,9 +112,9 @@
     <div class="container">
         <div class="card">
             <h2>选择转换类型</h2>
-            <p class="desc">
-                上传研发提供的 Excel 表格，自动转换为标准测试用例格式。<br>
-                支持菜单一致性核对和报警用例两种转换模式。
+            <p class.desc">
+                上传研发提供的文件，自动转换为标准测试用例格式。<br>
+                支持菜单一致性核对和报警核对Word生成两种模式。
             </p>
             <div class="btn-grid">
                 <a class="btn-card" href="{{ url_for('convert_menu') }}">
@@ -122,12 +122,7 @@
                     <h3>菜单一致性核对转换</h3>
                     <p>上传「菜单流程图」Excel<br>自动删除倒计时列、添加一致性评估列<br>自动校正步骤序号</p>
                 </a>
-                <a class="btn-card" href="{{ url_for('convert_alarm_route') }}">
-                    <div class="icon">⚠️</div>
-                    <h3>报警用例转换（Excel）</h3>
-                    <p>上传「报警文件」Excel<br>自动添加用例结果列<br>生成标准报警测试用例</p>
-                </a>
-                <a class="btn-card full-width" href="{{ url_for('convert_alarm_word_route') }}">
+                <a class="btn-card" href="{{ url_for('convert_alarm_word_route') }}">
                     <div class="icon">📝</div>
                     <h3>报警核对Word生成</h3>
                     <p>上传「线路板功能说明书」Word<br>按照模板格式生成报警核对Word文档<br>保持格式不变</p>

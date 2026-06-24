@@ -380,41 +380,6 @@ def convert_menu():
 
     return render_template('upload.html', title='菜单一致性核对转换', action=url_for('convert_menu'))
 
-@app.route('/convert/alarm', methods=['GET', 'POST'])
-def convert_alarm_route():
-    if request.method == 'POST':
-        if 'file' not in request.files:
-            flash('请选择文件')
-            return redirect(request.url)
-
-        file = request.files['file']
-        if file.filename == '':
-            flash('请选择文件')
-            return redirect(request.url)
-
-        if not file.filename.endswith(('.xlsx', '.xls')):
-            flash('仅支持 .xlsx 或 .xls 格式')
-            return redirect(request.url)
-
-        filename = file.filename
-        input_path = os.path.join(UPLOAD_FOLDER, filename)
-        file.save(input_path)
-
-        output_filename = filename.replace('.xlsx', '').replace('.xls', '') + '_报警用例.xlsx'
-        output_path = os.path.join(OUTPUT_FOLDER, output_filename)
-
-        try:
-            sheet_count = convert_alarm(input_path, output_path)
-            flash(f'转换成功！共处理 {sheet_count} 个sheet。')
-            return render_template('result.html',
-                                download_url=url_for('download_file', filename=output_filename),
-                                filename=output_filename)
-        except Exception as e:
-            flash(f'转换失败：{str(e)}')
-            return redirect(request.url)
-
-    return render_template('upload.html', title='报警用例转换（Excel）', action=url_for('convert_alarm_route'))
-
 
 @app.route('/convert/alarm-word', methods=['GET', 'POST'])
 def convert_alarm_word_route():
