@@ -383,7 +383,7 @@ def convert_menu():
 
 @app.route('/convert/alarm-word', methods=['GET', 'POST'])
 def convert_alarm_word_route():
-    """报警核对Word生成"""
+    """报警核对Word生成 - 从线路板功能说明书提取报警数据"""
     if request.method == 'POST':
         if 'file' not in request.files:
             flash('请选择文件')
@@ -402,16 +402,27 @@ def convert_alarm_word_route():
         input_path = os.path.join(UPLOAD_FOLDER, filename)
         file.save(input_path)
 
-        # 使用用户上传的文件作为模板
-        # 修复路径问题：使用基于app.py所在目录的绝对路径
-        BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-        template_path = os.path.join(BASE_DIR, '程序/程序/L15-Pxx-样机-报警核对-版本号 - 训练1.docx')
-
         output_filename = filename.replace('.docx', '') + '_报警核对.docx'
         output_path = os.path.join(OUTPUT_FOLDER, output_filename)
 
         try:
-            alarm_count = convert_alarm_word(template_path, input_path, output_path)
+            # 导入报警Word生成模块
+            import sys
+            BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+            if BASE_DIR not in sys.path:
+                sys.path.append(BASE_DIR)
+            from alarm_word_generator import extract_alarm_data, create_alarm_word
+
+            # 提取报警数据
+            alarm_data = extract_alarm_data(input_path)
+
+            if not alarm_data:
+                flash('未找到报警数据，请检查文件格式！')
+                return redirect(request.url)
+
+            # 生成报警核对Word文档
+            alarm_count = create_alarm_word(output_path, alarm_data)
+
             flash(f'生成成功！共生成 {alarm_count} 个报警用例。')
             return render_template('result.html',
                                 download_url=url_for('download_file', filename=output_filename),
