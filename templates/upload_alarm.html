@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ title }} - 九阳程序用例转换工具</title>
+    <style>
+        * { margin:0; padding:0; box-sizing:border-box; }
+        body {
+            font-family: 'Microsoft YaHei', '微软雅黑', Arial, sans-serif;
+            background: linear-gradient(135deg, #e8f4fd 0%, #dbeafe 100%);
+            min-height:100vh;
+        }
+        .header {
+            width:100%; background:linear-gradient(90deg,#1a56db,#1e40af);
+            color:white; padding:16px 40px; display:flex; align-items:center; gap:16px;
+        }
+        .header a { color:white; text-decoration:none; font-size:14px; opacity:0.8; }
+        .header a:hover { opacity:1; }
+        .header h1 { font-size:20px; margin-left:16px; }
+        .container { display:flex; justify-content:center; padding:40px 20px; }
+        .card {
+            background:white; border-radius:16px; box-shadow:0 8px 30px rgba(0,0,0,0.08);
+            padding:40px 48px; width:100%; max-width:640px; text-align:center;
+        }
+        .card h2 { font-size:22px; color:#1e40af; margin-bottom:8px; }
+        .card p.hint { color:#6b7280; font-size:14px; margin-bottom:24px; text-align:left; }
+        .upload-area {
+            border:2px dashed #bfdbfe; border-radius:12px; padding:48px 24px;
+            background:#f8faff; cursor:pointer; transition:all 0.2s; margin-bottom:24px;
+        }
+        .upload-area:hover, .upload-area.dragover {
+            border-color:#3b82f6; background:#eff6ff;
+        }
+        .upload-area .icon { font-size:48px; margin-bottom:12px; }
+        .upload-area p { color:#6b7280; font-size:14px; }
+        .upload-area .filename { color:#1e40af; font-weight:600; margin-top:8px; }
+        input[type=file] { display:none; }
+        .btn-primary {
+            background:linear-gradient(90deg,#3b82f6,#2563eb); color:white; border:none;
+            padding:14px 48px; border-radius:10px; font-size:16px; font-weight:600;
+            cursor:pointer; transition:all 0.2s; width:100%;
+        }
+        .btn-primary:hover { background:linear-gradient(90deg,#2563eb,#1d4ed8); transform:translateY(-1px); }
+        .btn-primary:disabled { opacity:0.5; cursor:not-allowed; transform:none; }
+        .flash { padding:12px 20px; border-radius:8px; margin-bottom:20px; font-size:14px; }
+        .flash.error { background:#fef2f2; color:#dc2626; border:1px solid #fecaca; }
+        .flash.success { background:#f0fdf4; color:#16a34a; border:1px solid #bbf7d0; }
+
+        /* 标题信息表单样式 */
+        .title-form {
+            background:#f8faff; border:1px solid #bfdbfe; border-radius:12px;
+            padding:20px 24px; margin-bottom:24px; text-align:left;
+        }
+        .title-form h3 { color:#1e40af; font-size:15px; margin-bottom:16px; }
+        .form-row { display:flex; gap:16px; margin-bottom:12px; flex-wrap:wrap; }
+        .form-group { flex:1; min-width:180px; }
+        .form-group label { display:block; font-size:13px; color:#374151; margin-bottom:4px; font-weight:500; }
+        .form-group input {
+            width:100%; padding:8px 12px; border:1px solid #d1d5db; border-radius:8px;
+            font-size:14px; color:#1f2937; background:white; transition:border-color 0.2s;
+        }
+        .form-group input:focus { outline:none; border-color:#3b82f6; box-shadow:0 0 0 3px rgba(59,130,246,0.15); }
+        .form-group .hint { font-size:11px; color:#9ca3af; margin-top:2px; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <a href="{{ url_for('index') }}">← 返回首页</a>
+        <h1>{{ title }}</h1>
+    </div>
+
+    <div class="container">
+        <div class="card">
+            <h2>{{ title }}</h2>
+            <p class="hint">
+                请上传「线路板功能说明书」Word文件（.docx格式），并填写标题信息，系统将自动提取报警数据并生成完整的报警核对报告。
+            </p>
+
+            {% with messages = get_flashed_messages(with_categories=true) %}
+                {% if messages %}
+                    {% for category, msg in messages %}
+                        <div class="flash {{ 'error' if category=='error' else 'success' }}">{{ msg }}</div>
+                    {% endfor %}
+                {% endif %}
+            {% endwith %}
+
+            <form method="POST" enctype="multipart/form-data" id="uploadForm">
+                <div class="upload-area" id="uploadArea">
+                    <div class="icon">📄</div>
+                    <p>点击或拖拽文件到此区域</p>
+                    <p style="font-size:12px;margin-top:4px;color:#9ca3af;">仅支持 .docx 格式（Word文档）</p>
+                    <div class="filename" id="fileName"></div>
+                </div>
+                <input type="file" name="file" id="fileInput" accept=".docx">
+
+                <!-- 标题信息 -->
+                <div class="title-form">
+                    <h3>📋 标题信息（将填入报告第一页）</h3>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>样机名称/型号</label>
+                            <input type="text" name="model" value="DJ12-K6pro" placeholder="如：DJ12-K6pro">
+                        </div>
+                        <div class="form-group">
+                            <label>程序版本号</label>
+                            <input type="text" name="version" value="" placeholder="如：V4.0">
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>校验和</label>
+                            <input type="text" name="checksum" value="" placeholder="留空">
+                        </div>
+                        <div class="form-group">
+                            <label>额定电压</label>
+                            <input type="text" name="voltage" value="220V/50HZ" placeholder="如：220V/50HZ">
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>加热功率</label>
+                            <input type="text" name="power1" value="加热功率：1200W" placeholder="如：加热功率：1200W">
+                            <div class="hint">将填入"额定功率"上方行</div>
+                        </div>
+                        <div class="form-group">
+                            <label>搅拌功率</label>
+                            <input type="text" name="power2" value="搅拌功率：400W" placeholder="如：搅拌功率：400W">
+                            <div class="hint">将填入"额定功率"下方行</div>
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>阶段</label>
+                            <input type="text" name="stage" value="" placeholder="留空">
+                        </div>
+                    </div>
+                </div>
+
+                <button type="submit" class="btn-primary" id="submitBtn">开始生成</button>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        const uploadArea = document.getElementById('uploadArea');
+        const fileInput = document.getElementById('fileInput');
+        const fileName = document.getElementById('fileName');
+        const form = document.getElementById('uploadForm');
+
+        uploadArea.addEventListener('click', () => fileInput.click());
+        uploadArea.addEventListener('dragover', (e) => { e.preventDefault(); uploadArea.classList.add('dragover'); });
+        uploadArea.addEventListener('dragleave', () => uploadArea.classList.remove('dragover'));
+        uploadArea.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadArea.classList.remove('dragover');
+            if (e.dataTransfer.files.length) {
+                fileInput.files = e.dataTransfer.files;
+                fileName.textContent = e.dataTransfer.files[0].name;
+            }
+        });
+        fileInput.addEventListener('change', () => {
+            if (fileInput.files.length) {
+                fileName.textContent = fileInput.files[0].name;
+            }
+        });
+
+        form.addEventListener('submit', () => {
+            document.getElementById('submitBtn').disabled = true;
+            document.getElementById('submitBtn').textContent = '生成中...';
+        });
+    </script>
+</body>
+</html>

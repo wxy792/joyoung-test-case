@@ -16,6 +16,11 @@ from openpyxl.utils import get_column_letter
 from openpyxl.worksheet.datavalidation import DataValidation
 from openpyxl.formatting.rule import FormulaRule
 from flask import Flask, render_template, request, send_file, flash, redirect, url_for
+import shutil, copy, re, glob
+from docx import Document
+from docx.shared import Pt, Cm
+from docx.oxml.ns import qn
+from docx.oxml import OxmlElement
 
 app = Flask(__name__,
             template_folder=os.path.join(os.path.dirname(os.path.abspath(__file__)), 'templates'),
@@ -227,113 +232,274 @@ def convert_menu_consistency(input_path, output_path):
     return len(new_wb.sheetnames)
 
 
-# ===================== 转换功能2：报警用例Word生成 =====================
+# ===================== 报警核对Word生成（完整版） =====================
 
-def convert_alarm_word(template_path, src_path, output_path):
-    """
-    将线路板功能说明书（docx）转换为报警核对Word文档
-    使用用户上传的文件作为模板，保持格式不变
-    """
-    import shutil
-    import copy
-    from docx import Document
-    import re
+def set_cell_text_keep_valign(cell, text, bold=False, size=10.5, align='center'):
+    """设置单元格文字，保留vAlign XML属性（垂直居中）"""
+    tc = cell._tc
+    tcPr = tc.get_or_add_tcPr()
+    vAlign_elem = tcPr.find(qn('w:vAlign'))
+    vAlign_val = vAlign_elem.get(qn('w:val')) if vAlign_elem is not None else None
 
-    # 1. 复制模板文件
-    shutil.copyfile(template_path, output_path)
+    cell.text = ''
+    para = cell.paragraphs[0]
+    if align == 'left':
+        para.alignment = 0
+    else:
+        para.alignment = 1
 
-    # 2. 打开复制后的文件
-    doc = Document(output_path)
+    run = para.add_run(text)
+    run.bold = bold
+    run.font.size = Pt(size)
+    run.font.name = '宋体'
+    run._element.rPr.rFonts.set(qn('w:eastAsia'), '宋体')
 
-    # 3. 提取报警数据
-    src_doc = Document(src_path)
+    if vAlign_val:
+        new_vAlign = OxmlElement('w:vAlign')
+        new_vAlign.set(qn('w:val'), vAlign_val)
+        old = tcPr.find(qn('w:vAlign'))
+        if old is not None:
+            tcPr.remove(old)
+        tcPr.append(new_vAlign)
+    cell.vertical_alignment = 1
+
+
+def parse_trigger_states(raw_states):
+    """健壮解析触发状态（兼容多种格式）"""
+    if not raw_states or not raw_states.strip():
+        return ['']
+    parts = re.split(r'(?=\s*\d+\.)', raw_states)
+    parts = [p.strip() for p in parts if p.strip()]
+    if len(parts) > 1:
+        cleaned = [re.sub(r'^\s*\d+\.\s*', '', p) for p in parts]
+        return cleaned
+    lines = [l.strip() for l in raw_states.split('\n') if l.strip()]
+    if len(lines) > 1:
+        return lines
+    return [raw_states.strip()]
+
+
+def parse_alarm_code(alarm_type_str):
+    """解析报警代码和名称（支持中英文括号）"""
+    s = alarm_type_str.strip()
+    match = re.match(r'([A-Za-z0-9]+)\s*[（(]([^）)]+)[）)]', s)
+    if match:
+        return match.group(1), match.group(2)
+    parts = re.split(r'\s+', s, 1)
+    if len(parts) >= 2:
+        return parts[0], parts[1]
+    return s, s
+
+
+def find_alarm_table(doc):
+    """动态查找报警表格（不依赖固定索引）"""
+    for ti, table in enumerate(doc.tables):
+        try:
+            first_row = table.rows[0]
+            headers = [cell.text.strip() for cell in first_row.cells]
+            header_str = ' '.join(headers)
+            if '报警类型' in header_str or '触发状态' in header_str:
+                return table
+        except:
+            continue
+    if doc.tables:
+        return doc.tables[-1]
+    return None
+
+
+def extract_alarms_from_spec(spec_path):
+    """从线路板功能说明书提取报警列表（动态列映射）"""
+    doc = Document(spec_path)
+    alarm_table = find_alarm_table(doc)
+    if alarm_table is None:
+        return []
+
+    headers = [cell.text.strip() for cell in alarm_table.rows[0].cells]
+    col_map = {}
+    for hi, h in enumerate(headers):
+        h = h.strip()
+        if '序号' in h and '序号' not in col_map:
+            col_map['序号'] = hi
+        elif '报警类型' in h and '报警类型' not in col_map:
+            col_map['报警类型'] = hi
+        elif '报警文本' in h and '报警文本' not in col_map:
+            col_map['报警文本'] = hi
+        elif '触发状态' in h and '触发状态' not in col_map:
+            col_map['触发状态'] = hi
+        elif '触发功能' in h and '触发功能' not in col_map:
+            col_map['触发功能'] = hi
+        elif '报警原因' in h or '触发方法' in h:
+            col_map['报警原因及触发方法'] = hi
+        elif '是否可恢复' in h and '是否可恢复' not in col_map:
+            col_map['是否可恢复'] = hi
+
+    defaults = {'序号': 0, '报警类型': 1, '报警文本': 2, '触发状态': 3,
+                '触发功能': 4, '报警原因及触发方法': 5, '是否可恢复': 6}
+    for k, v in defaults.items():
+        if k not in col_map:
+            col_map[k] = v
+
     alarms = []
+    for i, row in enumerate(alarm_table.rows):
+        if i == 0:
+            continue
+        cells = [cell.text.strip() for cell in row.cells]
+        while len(cells) <= max(col_map.values()):
+            cells.append('')
+        alarms.append({
+            '序号': cells[col_map['序号']],
+            '报警类型': cells[col_map['报警类型']],
+            '报警文本': cells[col_map['报警文本']],
+            '触发状态': cells[col_map['触发状态']],
+            '触发功能': cells[col_map['触发功能']],
+            '报警原因及触发方法': cells[col_map['报警原因及触发方法']],
+            '是否可恢复': cells[col_map['是否可恢复']]
+        })
+    return alarms
 
-    # 查找包含报警数据的表格
-    for table in src_doc.tables:
-        for row in table.rows:
-            cells_text = [cell.text.strip() for cell in row.cells]
 
-            # 查找包含"U"开头的报警代码
-            for i, text in enumerate(cells_text):
-                if re.match(r'^U\d+', text):
-                    alarm_code = text.strip()
-                    alarm_code = alarm_code.replace('\n', '').replace('\r', '')
+def generate_full_alarm_report(template_path, spec_path, output_path, title_info=None):
+    """
+    完整报警核对报告生成：
+    - 复制模板文档，清除原内容后插入新表格
+    - 根据触发状态数量自动复制报警表格
+    - 填充所有预期结果列
+    """
+    if title_info is None:
+        title_info = {}
 
-                    # 提取报警类型
-                    alarm_type = ""
-                    if "(" in alarm_code and ")" in alarm_code:
-                        start = alarm_code.find("(")
-                        end = alarm_code.find(")")
-                        alarm_type = alarm_code[start+1:end]
-                        alarm_code = alarm_code[:start] + "：" + alarm_type
-                    elif "：" in alarm_code:
-                        parts = alarm_code.split("：")
-                        if len(parts) > 1:
-                            alarm_type = parts[1].strip()
-                    elif ":" in alarm_code:
-                        parts = alarm_code.split(":")
-                        if len(parts) > 1:
-                            alarm_type = parts[1].strip()
-                            alarm_code = parts[0] + "：" + alarm_type
-
-                    # 查找报警文案
-                    alarm_text = ""
-                    for j in range(i+1, len(cells_text)):
-                        if cells_text[j]:
-                            alarm_text = cells_text[j]
-                            break
-
-                    alarms.append({
-                        'code': alarm_code,
-                        'type': alarm_type,
-                        'text': alarm_text
-                    })
-
+    alarms = extract_alarms_from_spec(spec_path)
     if len(alarms) == 0:
         return 0
 
-    # 4. 保存第一个报警表格的XML
-    if len(doc.tables) <= 1:
-        return 0
+    shutil.copy2(template_path, output_path)
+    doc = Document(output_path)
 
-    template_table_xml = copy.deepcopy(doc.tables[1]._element)
+    body = doc.element.body
+    sectPr = body.find(qn('w:sectPr'))
 
-    # 5. 更新第一个报警
-    title_cell = doc.tables[1].rows[0].cells[0]
-    title_cell.text = alarms[0]['code']
+    for child in list(body):
+        if child.tag != (qn('w:sectPr')) and child is not sectPr:
+            body.remove(child)
 
-    if len(doc.tables[1].rows) > 2:
-        alarm_text_cell = doc.tables[1].rows[2].cells[2]
-        alarm_text_cell.text = alarms[0]['text']
+    tpl = Document(template_path)
+    tpl_title_tbl = tpl.tables[0]
+    new_title_tbl = copy.deepcopy(tpl_title_tbl._tbl)
+    body.insert(0, new_title_tbl)
 
-    # 6. 为其他报警添加表格
-    for i in range(1, len(alarms)):
-        alarm = alarms[i]
+    title_tbl = doc.tables[0]
+    set_cell_text_keep_valign(title_tbl.rows[1].cells[1], title_info.get('model', ''), size=9)
+    set_cell_text_keep_valign(title_tbl.rows[2].cells[1], title_info.get('voltage', ''), size=9)
 
-        # 复制表格XML
-        new_xml = copy.deepcopy(template_table_xml)
+    power_cell = title_tbl.rows[2].cells[3]
+    power_lines = title_info.get('power', ['', ''])
+    tc = power_cell._tc
+    tcPr = tc.get_or_add_tcPr()
+    vAlign_elem = tcPr.find(qn('w:vAlign'))
+    vAlign_val = vAlign_elem.get(qn('w:val')) if vAlign_elem is not None else None
+    power_cell.text = ''
+    para = power_cell.paragraphs[0]
+    para.alignment = 1
+    for j, line in enumerate(power_lines):
+        run = para.add_run(line)
+        run.font.size = Pt(9)
+        run.font.name = '宋体'
+        run._element.rPr.rFonts.set(qn('w:eastAsia'), '宋体')
+        if j < len(power_lines) - 1:
+            br = OxmlElement('w:br')
+            run._element.append(br)
+    if vAlign_val:
+        new_va = OxmlElement('w:vAlign')
+        new_va.set(qn('w:val'), vAlign_val)
+        old = tcPr.find(qn('w:vAlign'))
+        if old is not None:
+            tcPr.remove(old)
+        tcPr.append(new_va)
+    power_cell.vertical_alignment = 1
 
-        # 插入到文档末尾
-        body = doc.element.body
-        body.append(new_xml)
+    total_tables = 0
+    if len(tpl.tables) > 1:
+        tpl_alarm_tbl = tpl.tables[1]
 
-        # 保存并重新打开
-        doc.save(output_path)
-        doc = Document(output_path)
+        for idx, alarm in enumerate(alarms):
+            code, name = parse_alarm_code(alarm['报警类型'])
+            display_code = f"{code}：{name}"
 
-        # 更新新表格
-        title_cell = doc.tables[-1].rows[0].cells[0]
-        title_cell.text = alarm['code']
+            states_clean = parse_trigger_states(alarm.get('触发状态', ''))
+            if len(states_clean) == 0 or (len(states_clean) == 1 and states_clean[0] == ''):
+                states_clean = ['']
 
-        if len(doc.tables[-1].rows) > 2:
-            alarm_text_cell = doc.tables[-1].rows[2].cells[2]
-            alarm_text_cell.text = alarm['text']
+            for si, state_name in enumerate(states_clean):
+                new_alarm_tbl = copy.deepcopy(tpl_alarm_tbl._tbl)
+                body.append(new_alarm_tbl)
+                alarm_tbl = doc.tables[-1]
+                total_tables += 1
 
-    # 7. 保存最终文档
+                set_cell_text_keep_valign(alarm_tbl.rows[0].cells[0], display_code, bold=True, size=12)
+
+                trigger_method = alarm.get('报警原因及触发方法', '')
+                test_condition_text = f'前置条件：{state_name}\n触发条件：{trigger_method}\n功能选择：\n操作：'
+                set_cell_text_keep_valign(alarm_tbl.rows[2].cells[0], test_condition_text, size=9, align='left')
+
+                alarm_text = alarm.get('报警文本', '')
+                set_cell_text_keep_valign(alarm_tbl.rows[2].cells[2], alarm_text, size=9)
+
+                if code == 'U23':
+                    beep_text = '蜂鸣器短鸣10次'
+                elif code == 'E7':
+                    beep_text = '蜂鸣器长鸣'
+                else:
+                    beep_text = '蜂鸣器短鸣1次'
+                set_cell_text_keep_valign(alarm_tbl.rows[3].cells[2], beep_text, size=9)
+
+                set_cell_text_keep_valign(alarm_tbl.rows[4].cells[2], code, size=9)
+
+                set_cell_text_keep_valign(alarm_tbl.rows[5].cells[2], '关闭电机', size=9)
+                set_cell_text_keep_valign(alarm_tbl.rows[6].cells[2], '关闭加热', size=9)
+
+                recoverable = alarm.get('是否可恢复', '')
+                if '否' in str(recoverable):
+                    handle_text = '重新上电'
+                else:
+                    if code == 'U2':
+                        handle_text = '闭合杯盖'
+                    elif code in ('E3', 'E4'):
+                        handle_text = '电压调至220V'
+                    elif code in ('E3A', 'E4A'):
+                        handle_text = '软件屏蔽，电压调至220V'
+                    elif code == 'U23':
+                        handle_text = '正确放好接浆杯'
+                    elif code == 'U24':
+                        handle_text = '清理余水盒并放回'
+                    elif code == 'U28':
+                        handle_text = '水箱加水'
+                    elif code == 'U39':
+                        handle_text = '正确放置出浆嘴'
+                    else:
+                        handle_text = ''
+                set_cell_text_keep_valign(alarm_tbl.rows[7].cells[2], handle_text, size=9)
+
+                set_cell_text_keep_valign(alarm_tbl.rows[8].cells[2], recoverable, size=9)
+
+                for row in alarm_tbl.rows:
+                    for cell in row.cells:
+                        paras_to_remove = []
+                        for pi, para in enumerate(cell.paragraphs):
+                            if pi == 0:
+                                continue
+                            if not para.text.strip():
+                                paras_to_remove.append(para._p)
+                        for p in paras_to_remove:
+                            p.getparent().remove(p)
+
+    existing_sectPr = body.find(qn('w:sectPr'))
+    if existing_sectPr is not None:
+        body.remove(existing_sectPr)
+    if sectPr is not None:
+        body.append(sectPr)
+
     doc.save(output_path)
-
-    return len(alarms)
+    return total_tables
 
 
 # ===================== Flask 路由 =====================
@@ -380,10 +546,45 @@ def convert_menu():
 
     return render_template('upload.html', title='菜单一致性核对转换', action=url_for('convert_menu'))
 
+@app.route('/convert/alarm', methods=['GET', 'POST'])
+def convert_alarm_route():
+    if request.method == 'POST':
+        if 'file' not in request.files:
+            flash('请选择文件')
+            return redirect(request.url)
+
+        file = request.files['file']
+        if file.filename == '':
+            flash('请选择文件')
+            return redirect(request.url)
+
+        if not file.filename.endswith(('.xlsx', '.xls')):
+            flash('仅支持 .xlsx 或 .xls 格式')
+            return redirect(request.url)
+
+        filename = file.filename
+        input_path = os.path.join(UPLOAD_FOLDER, filename)
+        file.save(input_path)
+
+        output_filename = filename.replace('.xlsx', '').replace('.xls', '') + '_报警用例.xlsx'
+        output_path = os.path.join(OUTPUT_FOLDER, output_filename)
+
+        try:
+            sheet_count = convert_alarm(input_path, output_path)
+            flash(f'转换成功！共处理 {sheet_count} 个sheet。')
+            return render_template('result.html',
+                                download_url=url_for('download_file', filename=output_filename),
+                                filename=output_filename)
+        except Exception as e:
+            flash(f'转换失败：{str(e)}')
+            return redirect(request.url)
+
+    return render_template('upload.html', title='报警用例转换（Excel）', action=url_for('convert_alarm_route'))
+
 
 @app.route('/convert/alarm-word', methods=['GET', 'POST'])
 def convert_alarm_word_route():
-    """报警核对Word生成 - 从线路板功能说明书提取报警数据"""
+    """报警核对Word生成（完整版）"""
     if request.method == 'POST':
         if 'file' not in request.files:
             flash('请选择文件')
@@ -402,28 +603,38 @@ def convert_alarm_word_route():
         input_path = os.path.join(UPLOAD_FOLDER, filename)
         file.save(input_path)
 
-        output_filename = filename.replace('.docx', '') + '_报警核对.docx'
+        template_path = '程序/程序/L15-Pxx-样机-报警核对-版本号 - 训练1.docx'
+
+        # 自动版本号
+        pattern = os.path.join(OUTPUT_FOLDER, '报警核对-完整报告-V*.docx')
+        existing = glob.glob(pattern)
+        max_ver = 0
+        for f in existing:
+            m = re.search(r'-V(\d+)\.docx', f)
+            if m:
+                v = int(m.group(1))
+                if v > max_ver:
+                    max_ver = v
+        next_ver = max_ver + 1
+        output_filename = f'报警核对-完整报告-V{next_ver}.docx'
         output_path = os.path.join(OUTPUT_FOLDER, output_filename)
 
+        # 标题信息
+        title_info = {
+            'model': request.form.get('model', 'DJ12-K6pro'),
+            'version': request.form.get('version', ''),
+            'checksum': request.form.get('checksum', ''),
+            'voltage': request.form.get('voltage', '220V/50HZ'),
+            'power': [
+                request.form.get('power1', '加热功率：1200W'),
+                request.form.get('power2', '搅拌功率：400W')
+            ],
+            'stage': request.form.get('stage', ''),
+        }
+
         try:
-            # 导入报警Word生成模块
-            import sys
-            BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-            if BASE_DIR not in sys.path:
-                sys.path.append(BASE_DIR)
-            from alarm_word_generator import extract_alarm_data, create_alarm_word
-
-            # 提取报警数据
-            alarm_data = extract_alarm_data(input_path)
-
-            if not alarm_data:
-                flash('未找到报警数据，请检查文件格式！')
-                return redirect(request.url)
-
-            # 生成报警核对Word文档
-            alarm_count = create_alarm_word(output_path, alarm_data)
-
-            flash(f'生成成功！共生成 {alarm_count} 个报警用例。')
+            total = generate_full_alarm_report(template_path, input_path, output_path, title_info)
+            flash(f'生成成功！共生成 {total} 个报警核对表。')
             return render_template('result.html',
                                 download_url=url_for('download_file', filename=output_filename),
                                 filename=output_filename)
@@ -431,7 +642,9 @@ def convert_alarm_word_route():
             flash(f'生成失败：{str(e)}')
             return redirect(request.url)
 
-    return render_template('upload.html', title='报警核对Word生成', action=url_for('convert_alarm_word_route'))
+    return render_template('upload_alarm.html',
+                          title='报警核对Word生成',
+                          action=url_for('convert_alarm_word_route'))
 
 @app.route('/download/<filename>')
 def download_file(filename):
